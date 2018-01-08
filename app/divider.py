@@ -29,6 +29,9 @@ NUM_RESULTS = 1
 if ARGS.num_results:
     NUM_RESULTS = ARGS.num_results
 
+if ARGS.v_out > ARGS.v_in:
+    print('Error: v_out can\'t be larger than v_in')
+    exit(1)
 
 print(SCHEMATIC)
 print(Run(SELECTED_SERIES, ARGS.v_out / ARGS.v_in).get_result(NUM_RESULTS))
