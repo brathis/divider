@@ -1,7 +1,5 @@
 """ Contains all the logic """
 
-from enum import Enum
-
 #          R1           R2
 #     --[======]-----[======]--
 #    |            |            |
@@ -23,28 +21,114 @@ SERIES = {
 }
 
 
-class Configuration:
-    """ A Configuration consists of two resistors and a voltage ratio """
-    def __init__(self, res_1, res_2, desired_ratio):
-        self.res_1 = res_1
-        self.res_2 = res_2
-        self.desired_ratio = desired_ratio
+def get_suffix(exp):
+    """ Returns a human-friendly resistor suffix """
+    suffix = int(exp / 3)
+    ret = ''
+    if suffix == -1:
+        ret += 'm'
+    elif suffix == 0:
+        pass
+    elif suffix == 1:
+        ret += 'k'
+    elif suffix == 2:
+        ret += 'M'
+    elif suffix == 3:
+        ret += 'G'
+    else:
+        ret += '* 10^{} '.format(exp)
 
-        self.ratio = res_2 / (res_1 + res_2)
+    return ret + 'Ohm'
+
+
+def format_resistance(res, exp):
+    """ Returns a human-friendly representation of a given resistance value """
+    assert res > 0 and res < 10
+
+    base = res * 10 ** (exp % 3)
+    suffix = get_suffix(exp)
+
+    return '{:3.2f} {}'.format(base, suffix)
+
+
+def closest_sort_helper(item):
+    """ Helper for get_closest_in_series """
+    return item[1]
+
+
+def get_closest_in_series(val, series):
+    """ Gets the closest realizable value given a resistor series """
+    # Split val into res and exp
+    exp = 0
+    res = val
+    while res >= 10:
+        res /= 10
+        exp += 1
+
+    # Calculate list of relative errors
+    errors = [(res_series, abs(res_series - res) / res)
+              for res_series in series[1]]
+    # Sort by relative error
+    errors.sort(key=closest_sort_helper)
+    return errors[0][0], exp
+
+
+class Configuration:
+    """ A Configuration consists of two resistors, an exponent and a voltage ratio """
+
+    def find_match(self):
+        """ Finds the matching second resistor for the given desired ratio """
+        if hasattr(self, 'val_1'):
+            ideal_2 = self.val_1 * self.desired_ratio / \
+                (1 - self.desired_ratio)
+            self.res_2, self.exp_2 = get_closest_in_series(
+                ideal_2, self.series)
+            self.val_2 = self.res_2 * 10 ** self.exp_2
+        else:
+            ideal_1 = self.val_2 * \
+                (1 - self.desired_ratio) / self.desired_ratio
+            self.res_1, self.exp_1 = get_closest_in_series(
+                ideal_1, self.series)
+            self.val_1 = self.res_1 * 10 ** self.exp_1
+
+    def __init__(self, desired_ratio, series, res_1=None, exp_1=None, res_2=None, exp_2=None):
+        """ Given one resistor value and a desired ratio, calculates the other
+        as well as the resulting ratio and errors
+        """
+
+        assert (res_1 is None and exp_1 is None and res_2 is not None and exp_2 is not None) or (
+            res_1 is not None and exp_1 is not None and res_2 is None and exp_2 is None)
+
+        self.desired_ratio = desired_ratio
+        self.series = series
+
+        if res_1 is not None:
+            self.res_1 = res_1
+            self.exp_1 = exp_1
+            self.val_1 = res_1 * 10 ** self.exp_1
+        else:
+            self.res_2 = res_2
+            self.exp_2 = exp_2
+            self.val_2 = res_2 * 10 ** self.exp_2
+
+        self.find_match()
+
+        self.ratio = self.val_2 / (self.val_1 + self.val_2)
         self.error_abs = self.desired_ratio - self.ratio
         self.error_rel = self.error_abs / self.desired_ratio
 
     def __str__(self):
         return 'R1 = {}, R2 = {}, e_rel = {:3.2f}%, ratio = {:6.5f}\n'.format(
-            self.res_1,
-            self.res_2,
+            format_resistance(self.res_1, self.exp_1),
+            format_resistance(self.res_2, self.exp_2),
             self.error_rel * 100,
             self.ratio,)
 
+    def __eq__(self, other):
+        return self.val_1 == other.val_1 and self.val_2 == other.val_2
 
-def sort_absolute(item):
-    """ Helper to sort by absolute error """
-    return abs(item.error_abs)
+    def __hash__(self):
+        return hash((self.val_1, self.val_2))
 
 
 def sort_relative(item):
@@ -73,18 +157,16 @@ class Result:
 class Run:
     """ A Run iterates through a given series and returns a Result """
 
-    class SortType(Enum):
-        """ Enum to express, after which criterion to sort """
-        ABSOLUTE = 0
-        RELATIVE = 1
-
-    configurations = []
+    configurations = set()
 
     def create_configurations(self):
         """ Creates a list of all possible configurations for the given series """
-        for value_1 in self.series[1]:
-            for value_2 in self.series[1]:
-                self.configurations.append(Configuration(value_1, value_2, self.desired_ratio))
+        # Iterate over R1 and R2
+        for res_series in self.series[1]:
+            self.configurations.add(Configuration(
+                self.desired_ratio, self.series, res_1=res_series, exp_1=0))
+            self.configurations.add(Configuration(
+                self.desired_ratio, self.series, res_2=res_series, exp_2=0))
 
     def __init__(self, series, desired_ratio):
         self.series = series
@@ -92,11 +174,8 @@ class Run:
 
         self.create_configurations()
 
-    def get_result(self, num_results, sort_type=SortType.RELATIVE):
+    def get_result(self, num_results):
         """ Gets the <num_results> closest Configurations """
-        if sort_type == self.SortType.ABSOLUTE:
-            self.configurations.sort(key=sort_absolute)
-        else:
-            self.configurations.sort(key=sort_relative)
-
-        return Result(self.series[0], self.desired_ratio, self.configurations[:num_results])
+        configurations_list = list(self.configurations)
+        configurations_list.sort(key=sort_relative)
+        return Result(self.series[0], self.desired_ratio, configurations_list[:num_results])
