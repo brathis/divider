@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
 """ Handles user interaction """
 import argparse
-from models import Run, SERIES, RatioType
-
+from .models import Run, SERIES, RatioType
 
 SCHEMATIC = """
-          R1           R2
-     --[======]-----[======]--
+        R1           R2
+    --[======]-----[======]--
     |            |            |
-   V_in        V_out         GND
+V_in        V_out         GND
 """
 
 PARSER = argparse.ArgumentParser()

@@ -32,7 +32,8 @@ SERIES = {
 
 def get_suffix(exp):
     """ Returns a human-friendly resistor suffix """
-    suffix = int(exp / 3)
+    from math import floor
+    suffix = floor(exp / 3)
     ret = ''
     if suffix == -1:
         ret += 'm'
@@ -62,24 +63,29 @@ def format_resistance(res, exp):
 
 def closest_sort_helper(item):
     """ Helper for get_closest_in_series """
-    return item[1]
+    return item[2]
 
 
 def get_closest_in_series(val, series):
-    """ Gets the closest realizable value given a resistor series """
-    # Split val into res and exp
-    exp = 0
-    res = val
-    while res >= 10:
-        res /= 10
-        exp += 1
+    """ Gets the closest realizable value given a resistor series
+    Returns a tuple of base and exponent
+    """
+    from math import floor, log10
+
+    # Calculate exponent
+    exp = floor(log10(val))
 
     # Calculate list of relative errors
-    errors = [(res_series, abs(res_series - res) / res)
-              for res_series in series[1]]
+    # Also consider exponents above and below
+    errors = list()
+    for exp in range(exp - 1, exp + 2):
+        errors.extend(
+            (res_series, exp, abs(val - res_series * 10 ** exp) / val)
+            for res_series in series[1])
+
     # Sort by relative error
     errors.sort(key=closest_sort_helper)
-    return errors[0][0], exp
+    return errors[0][0], errors[0][1]
 
 
 class Configuration:
@@ -88,25 +94,32 @@ class Configuration:
     def find_match(self):
         """ Finds the matching second resistor for the given desired ratio """
         if hasattr(self, 'val_1'):
+            # Calculate ideal value for res_2
             if self.ratio_type is RatioType.VOLTAGE:
                 ideal_2 = self.val_1 * self.desired_ratio / \
                     (1 - self.desired_ratio)
             else:
                 ideal_2 = self.val_1 / self.desired_ratio
+
+            # Get closest available value for res_2
             self.res_2, self.exp_2 = get_closest_in_series(
                 ideal_2, self.series)
             self.val_2 = self.res_2 * 10 ** self.exp_2
         else:
+            # Calculate ideal value for res_1
             if self.ratio_type is RatioType.VOLTAGE:
                 ideal_1 = self.val_2 * \
                     (1 - self.desired_ratio) / self.desired_ratio
             else:
                 ideal_1 = self.val_2 * self.desired_ratio
+
+            # Calculate closest available value for res_1
             self.res_1, self.exp_1 = get_closest_in_series(
                 ideal_1, self.series)
             self.val_1 = self.res_1 * 10 ** self.exp_1
 
-    def __init__(self, desired_ratio, ratio_type, series, res_1=None, exp_1=None, res_2=None, exp_2=None):
+    def __init__(self, desired_ratio, ratio_type, series,
+                 res_1=None, exp_1=None, res_2=None, exp_2=None):
         """ Given one resistor value and a desired ratio, calculates the other
         as well as the resulting ratio and errors
         """
