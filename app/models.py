@@ -1,12 +1,19 @@
 """ Contains all the logic """
 
+from enum import Enum
+
 #          R1           R2
 #     --[======]-----[======]--
 #    |            |            |
 #   V_in        V_out         GND
 
 # V_out / V_in = R2 / (R1 + R2)
+# resistor_ratio = R1 / R2
 
+class RatioType(Enum):
+    """ Allows distinguishing between resistor ratios and voltage ratios """
+    VOLTAGE = 0
+    RESISTOR = 1
 
 SERIES = {
     'E6': ('E6', (1.0, 1.5, 2.2, 3.3, 4.7, 6.8)),
@@ -79,19 +86,23 @@ class Configuration:
     def find_match(self):
         """ Finds the matching second resistor for the given desired ratio """
         if hasattr(self, 'val_1'):
-            ideal_2 = self.val_1 * self.desired_ratio / \
-                (1 - self.desired_ratio)
+            if self.ratio_type is RatioType.VOLTAGE:
+                ideal_2 = self.val_1 * self.desired_ratio / (1 - self.desired_ratio)
+            else:
+                ideal_2 = self.val_1 / self.desired_ratio
             self.res_2, self.exp_2 = get_closest_in_series(
                 ideal_2, self.series)
             self.val_2 = self.res_2 * 10 ** self.exp_2
         else:
-            ideal_1 = self.val_2 * \
-                (1 - self.desired_ratio) / self.desired_ratio
+            if self.ratio_type is RatioType.VOLTAGE:
+                ideal_1 = self.val_2 * (1 - self.desired_ratio) / self.desired_ratio
+            else:
+                ideal_1 = self.val_2 * self.desired_ratio
             self.res_1, self.exp_1 = get_closest_in_series(
                 ideal_1, self.series)
             self.val_1 = self.res_1 * 10 ** self.exp_1
 
-    def __init__(self, desired_ratio, series, res_1=None, exp_1=None, res_2=None, exp_2=None):
+    def __init__(self, desired_ratio, ratio_type, series, res_1=None, exp_1=None, res_2=None, exp_2=None):
         """ Given one resistor value and a desired ratio, calculates the other
         as well as the resulting ratio and errors
         """
@@ -100,6 +111,7 @@ class Configuration:
             res_1 is not None and exp_1 is not None and res_2 is None and exp_2 is None)
 
         self.desired_ratio = desired_ratio
+        self.ratio_type = ratio_type
         self.series = series
 
         if res_1 is not None:
@@ -113,7 +125,11 @@ class Configuration:
 
         self.find_match()
 
-        self.ratio = self.val_2 / (self.val_1 + self.val_2)
+        if self.ratio_type is RatioType.VOLTAGE:
+            self.ratio = self.val_2 / (self.val_1 + self.val_2)
+        else:
+            self.ratio = self.val_1 / self.val_2
+
         self.error_abs = self.desired_ratio - self.ratio
         self.error_rel = self.error_abs / self.desired_ratio
 
@@ -139,13 +155,20 @@ def sort_relative(item):
 class Result:
     """ Represents the result of a Run """
 
-    def __init__(self, series, desired_ratio, configurations):
+    def __init__(self, series, desired_ratio, ratio_type, configurations):
         self.series = series
         self.desired_ratio = desired_ratio
+        self.ratio_type = ratio_type
         self.configurations = configurations
 
     def __str__(self):
-        string = '{} best results for ratio V_out / V_in = {:6.5f} using series {}:\n'.format(
+        format_string = ''
+        if self.ratio_type is RatioType.VOLTAGE:
+            format_string = '{} best results for ratio V_out / V_in = {:6.5f} using series {}:\n'
+        else:
+            format_string = '{} best results for ratio R1 / R2 = {:6.5f} using series {}:\n'
+
+        string = format_string.format(
             len(self.configurations),
             self.desired_ratio,
             self.series)
@@ -164,13 +187,14 @@ class Run:
         # Iterate over R1 and R2
         for res_series in self.series[1]:
             self.configurations.add(Configuration(
-                self.desired_ratio, self.series, res_1=res_series, exp_1=0))
+                self.desired_ratio, self.ratio_type, self.series, res_1=res_series, exp_1=0))
             self.configurations.add(Configuration(
-                self.desired_ratio, self.series, res_2=res_series, exp_2=0))
+                self.desired_ratio, self.ratio_type, self.series, res_2=res_series, exp_2=0))
 
-    def __init__(self, series, desired_ratio):
+    def __init__(self, series, desired_ratio, ratio_type=RatioType.VOLTAGE):
         self.series = series
         self.desired_ratio = desired_ratio
+        self.ratio_type = ratio_type
 
         self.create_configurations()
 
@@ -178,4 +202,4 @@ class Run:
         """ Gets the <num_results> closest Configurations """
         configurations_list = list(self.configurations)
         configurations_list.sort(key=sort_relative)
-        return Result(self.series[0], self.desired_ratio, configurations_list[:num_results])
+        return Result(self.series[0], self.desired_ratio, self.ratio_type, configurations_list[:num_results])
