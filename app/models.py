@@ -206,4 +206,5 @@ class Run:
         """ Gets the <num_results> closest Configurations """
         configurations_list = list(self.configurations)
         configurations_list.sort(key=sort_relative)
-        return Result(self.series[0], self.desired_ratio, self.ratio_type, configurations_list[:num_results])
+        return Result(self.series[0], self.desired_ratio,
+                      self.ratio_type, configurations_list[:num_results])
