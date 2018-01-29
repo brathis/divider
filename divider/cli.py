@@ -1,6 +1,6 @@
 """ Handles user interaction """
 import argparse
-from .models import Run, SERIES, RatioType
+from .divider import Run, SERIES, RatioType
 
 SCHEMATIC = """
         R1           R2

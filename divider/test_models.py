@@ -1,7 +1,7 @@
 """Contains tests for models module"""
 def test_get_suffix():
     """Test that we get the correct suffix for a given exponent"""
-    from .models import get_suffix
+    from .divider import get_suffix
 
     # less than milliohms
     assert get_suffix(-20) == '* 10^-20 Ohm'
@@ -38,7 +38,7 @@ def test_get_suffix():
 
 def test_get_closest_in_series():
     """Test that we get the actual closest resistors in the series"""
-    from .models import get_closest_in_series, SERIES
+    from .divider import get_closest_in_series, SERIES
 
     assert get_closest_in_series(6.7e-3, SERIES.get('E24')) == (6.8, -3)
     assert get_closest_in_series(4.4e-2, SERIES.get('E24')) == (4.3, -2)
@@ -54,7 +54,7 @@ def test_configs_resistor_ratio():
     """Test the essential mechanism of finding the best match
     for a given resistor and resistor ratio
     """
-    from .models import Configuration, RatioType, SERIES
+    from .divider import Configuration, RatioType, SERIES
 
     # 1.2 = 1.2 / 1.0
     conf_1 = Configuration(1.2, RatioType.RESISTOR, SERIES.get('E12'), res_2=1.0, exp_2=0)
